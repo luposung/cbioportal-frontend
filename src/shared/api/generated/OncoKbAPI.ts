@@ -312,6 +312,8 @@ export type EvidenceQueryRes = {
 
         'evidences': Array < Evidence >
 
+        'exactMatchedAlteration': Alteration
+
         'gene': Gene
 
         'id': string
@@ -324,7 +326,7 @@ export type EvidenceQueryRes = {
 
 };
 export type CancerGene = {
-    'entrezGeneId': string
+    'entrezGeneId': number
 
         'foundation': boolean
 
@@ -2589,7 +2591,7 @@ export default class OncoKbAPI {
         let headers: any = {};
         let form: any = {};
         return new Promise(function(resolve, reject) {
-            headers['Accept'] = '*/*';
+            headers['Accept'] = 'application/json';
             headers['Content-Type'] = 'application/json';
 
             if (parameters.$queryParameters) {
@@ -2714,7 +2716,7 @@ export default class OncoKbAPI {
         let headers: any = {};
         let form: any = {};
         return new Promise(function(resolve, reject) {
-            headers['Accept'] = '*/*';
+            headers['Accept'] = 'application/json';
             headers['Content-Type'] = 'application/json';
 
             if (parameters.$queryParameters) {

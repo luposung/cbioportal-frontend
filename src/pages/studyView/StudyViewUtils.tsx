@@ -16,9 +16,9 @@ import {BarDatum} from "./charts/barChart/BarChart";
 import {
     AnalysisGroup,
     ClinicalDataTypeEnum,
+    Datalabel,
     StudyViewFilterWithSampleIdentifierFilters,
-    StudyWithSamples,
-    Datalabel
+    StudyWithSamples
 } from "pages/studyView/StudyViewPageStore";
 import {
     ChartMeta,
@@ -256,11 +256,6 @@ export function getPriority(priorities: number[]): number {
     return priority;
 }
 
-export function isPreSelectedClinicalAttr(attr: string): boolean {
-    let result = attr.match(/(os_survival)|(dfs_survival)|(mut_cnt_vs_cna)|(mutated_genes)|(cna_details)|(^age)|(gender)|(sex)|(os_status)|(os_months)|(dfs_status)|(dfs_months)|(race)|(ethnicity)|(sample_type)|(histology)|(tumor_type)|(subtype)|(tumor_site)|(mutation_count)|(copy_number_alterations)|(.*(site|grade|stage).*)/i);
-    return _.isArray(result) && result.length > 0;
-}
-
 export function getClinicalDataType(patientAttribute: boolean): ClinicalDataType {
     return patientAttribute ? ClinicalDataTypeEnum.PATIENT : ClinicalDataTypeEnum.SAMPLE;
 }
@@ -279,77 +274,85 @@ export function getCurrentDate() {
 }
 
 export function getVirtualStudyDescription(
+                                            previousDescription: string | undefined,
                                             studyWithSamples: StudyWithSamples[],
                                             filter: StudyViewFilterWithSampleIdentifierFilters,
                                             attributeNamesSet: { [id: string]: string },
                                             genes: Gene[],
                                             user?: string) {
     let descriptionLines: string[] = [];
+    const createdOnStr = 'Created on';
+    if (previousDescription) {
+        // when the description is predefined, we just need to trim off anything after createdOnStr
+        const regex = new RegExp(`${createdOnStr}.*`);
+        descriptionLines.push(previousDescription.replace(regex, ''));
+    } else {
 
-    let entrezIdSet: { [id: string]: string } = _.reduce(genes, (acc: { [id: string]: string }, next) => {
-        acc[next.entrezGeneId] = next.hugoGeneSymbol
-        return acc
-    }, {})
-    //add to samples and studies count
+        let entrezIdSet: { [id: string]: string } = _.reduce(genes, (acc: { [id: string]: string }, next) => {
+            acc[next.entrezGeneId] = next.hugoGeneSymbol
+            return acc
+        }, {})
+        //add to samples and studies count
 
-    let uniqueSampleKeys = _.uniq(_.flatMap(studyWithSamples, study => study.uniqueSampleKeys))
-    descriptionLines.push(`${uniqueSampleKeys.length} sample${uniqueSampleKeys.length > 1 ? 's' : ''} from ${studyWithSamples.length} ${studyWithSamples.length > 1 ? 'studies:' : 'study:'}`);
-    //add individual studies sample count
-    studyWithSamples.forEach(studyObj => {
-        descriptionLines.push(`- ${studyObj.name} (${studyObj.uniqueSampleKeys.length} sample${uniqueSampleKeys.length > 1 ? 's' : ''})`);
-    })
-    //add filters
-    let filterLines: string[] = [];
-    if (!_.isEmpty(filter)) {
-        if (filter.cnaGenes && filter.cnaGenes.length > 0) {
-            filterLines.push('- CNA Genes:')
-            filterLines = filterLines.concat(filter.cnaGenes.map(cnaGene => {
-                return cnaGene.alterations.map(alteration => {
-                    let geneSymbol = entrezIdSet[alteration.entrezGeneId] || alteration.entrezGeneId
-                    return geneSymbol + "-" + getCNAByAlteration(alteration.alteration)
-                }).join(', ').trim();
-            }).map(line => '  - ' + line));
-        }
-        if (filter.mutatedGenes && filter.mutatedGenes.length > 0) {
-            filterLines.push('- Mutated Genes:')
-            filterLines = filterLines.concat(filter.mutatedGenes.map(mutatedGene => {
-                return mutatedGene.entrezGeneIds.map(entrezGeneId => {
-                    return entrezIdSet[entrezGeneId] || entrezGeneId;
-                }).join(', ').trim();
-            }).map(line => '  - ' + line));
-        }
-
-        if(filter.withMutationData !== undefined) {
-            filterLines.push(`With Mutation data: ${filter.withMutationData ? 'YES' : 'NO'}`);
-        }
-
-        if(filter.withCNAData !== undefined) {
-            filterLines.push(`With CNA data: ${filter.withCNAData ? 'YES' : 'NO'}`);
-        }
-
-        _.each(filter.clinicalDataEqualityFilters || [], (clinicalDataEqualityFilter) => {
-            let name = attributeNamesSet[clinicalDataEqualityFilter.clinicalDataType + '_' + clinicalDataEqualityFilter.attributeId];
-            filterLines.push(`- ${name}: ${clinicalDataEqualityFilter.values.join(', ')}`);
-        });
-
-        _.each(filter.clinicalDataIntervalFilters || [], (clinicalDataIntervalFilter) => {
-            let name = attributeNamesSet[clinicalDataIntervalFilter.clinicalDataType + '_' + clinicalDataIntervalFilter.attributeId];
-            filterLines.push(`- ${name}: ${intervalFiltersDisplayValue(clinicalDataIntervalFilter.values)}`);
-        });
-
-        _.each(filter.sampleIdentifiersSet || {}, (sampleIdentifiers, id) => {
-            let name = attributeNamesSet[id] || id;
-            filterLines.push(`- ${name}: ${sampleIdentifiers.length} samples`);
+        let uniqueSampleKeys = _.uniq(_.flatMap(studyWithSamples, study => study.uniqueSampleKeys))
+        descriptionLines.push(`${uniqueSampleKeys.length} sample${uniqueSampleKeys.length > 1 ? 's' : ''} from ${studyWithSamples.length} ${studyWithSamples.length > 1 ? 'studies:' : 'study:'}`);
+        //add individual studies sample count
+        studyWithSamples.forEach(studyObj => {
+            descriptionLines.push(`- ${studyObj.name} (${studyObj.uniqueSampleKeys.length} sample${uniqueSampleKeys.length > 1 ? 's' : ''})`);
         })
-    }
-    if (filterLines.length > 0) {
+        //add filters
+        let filterLines: string[] = [];
+        if (!_.isEmpty(filter)) {
+            if (filter.cnaGenes && filter.cnaGenes.length > 0) {
+                filterLines.push('- CNA Genes:')
+                filterLines = filterLines.concat(filter.cnaGenes.map(cnaGene => {
+                    return cnaGene.alterations.map(alteration => {
+                        let geneSymbol = entrezIdSet[alteration.entrezGeneId] || alteration.entrezGeneId
+                        return geneSymbol + "-" + getCNAByAlteration(alteration.alteration)
+                    }).join(', ').trim();
+                }).map(line => '  - ' + line));
+            }
+            if (filter.mutatedGenes && filter.mutatedGenes.length > 0) {
+                filterLines.push('- Mutated Genes:')
+                filterLines = filterLines.concat(filter.mutatedGenes.map(mutatedGene => {
+                    return mutatedGene.entrezGeneIds.map(entrezGeneId => {
+                        return entrezIdSet[entrezGeneId] || entrezGeneId;
+                    }).join(', ').trim();
+                }).map(line => '  - ' + line));
+            }
+
+            if (filter.withMutationData !== undefined) {
+                filterLines.push(`With Mutation data: ${filter.withMutationData ? 'YES' : 'NO'}`);
+            }
+
+            if (filter.withCNAData !== undefined) {
+                filterLines.push(`With CNA data: ${filter.withCNAData ? 'YES' : 'NO'}`);
+            }
+
+            _.each(filter.clinicalDataEqualityFilters || [], (clinicalDataEqualityFilter) => {
+                let name = attributeNamesSet[clinicalDataEqualityFilter.clinicalDataType + '_' + clinicalDataEqualityFilter.attributeId];
+                filterLines.push(`- ${name}: ${clinicalDataEqualityFilter.values.join(', ')}`);
+            });
+
+            _.each(filter.clinicalDataIntervalFilters || [], (clinicalDataIntervalFilter) => {
+                let name = attributeNamesSet[clinicalDataIntervalFilter.clinicalDataType + '_' + clinicalDataIntervalFilter.attributeId];
+                filterLines.push(`- ${name}: ${intervalFiltersDisplayValue(clinicalDataIntervalFilter.values)}`);
+            });
+
+            _.each(filter.sampleIdentifiersSet || {}, (sampleIdentifiers, id) => {
+                let name = attributeNamesSet[id] || id;
+                filterLines.push(`- ${name}: ${sampleIdentifiers.length} samples`);
+            })
+        }
+        if (filterLines.length > 0) {
+            descriptionLines.push('');
+            descriptionLines.push('Filters:');
+            descriptionLines = descriptionLines.concat(filterLines);
+        }
         descriptionLines.push('');
-        descriptionLines.push('Filters:');
-        descriptionLines = descriptionLines.concat(filterLines);
     }
-    descriptionLines.push('');
     //add creation and user name
-    descriptionLines.push('Created on ' + getCurrentDate() + (user ? ' by ' + user : ''));
+    descriptionLines.push(`${createdOnStr} ` + getCurrentDate() + (user ? ' by ' + user : ''));
     return descriptionLines.join('\n');
 }
 
@@ -544,6 +547,10 @@ export function isLogScaleByValues(values: number[]) {
             (value !== 0 && getExponent(value) % 0.5 !== 0)
         ) === undefined
     );
+}
+
+export function shouldShowChart(filer: Partial<StudyViewFilterWithSampleIdentifierFilters>, uniqueDataSize: number, sizeOfAllSamples: number) {
+    return isFiltered(filer) || uniqueDataSize >= 2 || sizeOfAllSamples === 1;
 }
 
 export function isEveryBinDistinct(data?: DataBin[]) {
@@ -961,11 +968,27 @@ export function isOccupied(matrix: string[][], position: Position, chartDimensio
     return occupied;
 }
 
-export function calculateLayout(visibleAttributes: ChartMeta[], cols: number): Layout[] {
+export function calculateLayout(visibleAttributes: ChartMeta[], cols: number, currentGridLayout?: Layout[], currentFocusedChartByUser?: ChartMeta): Layout[] {
     let layout: Layout[] = [];
     let matrix = [new Array(cols).fill('')] as string[][];
+    // sort the visibleAttributes by priority
+    visibleAttributes.sort(chartMetaComparator);
 
-    _.forEach(visibleAttributes.sort((a, b) => b.priority - a.priority), (chart: ChartMeta) => {
+    // look if we need to put the chart to a fixed position and add the position to the matrix
+    if (currentGridLayout && currentGridLayout.length > 0 && currentFocusedChartByUser) {
+        const currentChartLayout = currentGridLayout.find((layout) => layout.i === currentFocusedChartByUser.uniqueKey)!;
+        if (currentChartLayout) {
+            const newChartLayout = calculateNewLayoutForFocusedChart(currentChartLayout, currentFocusedChartByUser, cols);
+            layout.push(newChartLayout);
+            matrix = generateMatrixByLayout(newChartLayout, cols);
+        }
+        else {
+            throw(new Error("cannot find matching unique key in the grid layout"));
+        }
+    }
+
+    // filter out the fixed position chart then calculate layout
+    _.forEach(_.filter(visibleAttributes, (chart: ChartMeta) => currentFocusedChartByUser ? chart.uniqueKey !== currentFocusedChartByUser.uniqueKey : true), (chart: ChartMeta) => {
         const position = findSpot(matrix, chart.dimension);
         while ((position.y + chart.dimension.h) >= matrix.length) {
             matrix.push(new Array(cols).fill(''));
@@ -987,6 +1010,67 @@ export function calculateLayout(visibleAttributes: ChartMeta[], cols: number): L
         }
     });
     return layout;
+}
+
+export function calculateNewLayoutForFocusedChart(previousLayout: Layout, currentFocusedChartByUser: ChartMeta, cols: number): Layout {
+    const initialX = previousLayout.x;
+    const initialY = previousLayout.y;
+    const dimensionWidth = currentFocusedChartByUser.dimension.w;
+    let x = initialX;
+    let y = initialY;
+
+    if (isFocusedChartShrunk({w: previousLayout.w, h: previousLayout.h}, currentFocusedChartByUser.dimension)) {
+        x = initialX + previousLayout.w - dimensionWidth;
+    }
+    else if (initialX + dimensionWidth >= cols && initialX - dimensionWidth >= 0) {
+        x = cols - dimensionWidth;
+    }
+
+    return {
+        i: currentFocusedChartByUser.uniqueKey,
+        x,
+        y,
+        w: currentFocusedChartByUser.dimension.w,
+        h: currentFocusedChartByUser.dimension.h,
+        isResizable: false
+    };
+}
+
+export function generateMatrixByLayout(layout: Layout, cols: number) : string[][] {
+    let matrix = [new Array(cols).fill('')] as string[][];
+    const xMax = layout.x + layout.w;
+    const yMax = layout.y + layout.h;
+    while (yMax >= matrix.length) {
+        matrix.push(new Array(cols).fill(''));
+    }
+    for (let i = layout.y; i < yMax; i++) {
+        for (let j = layout.x; j < xMax; j++) {
+            matrix[i][j] = layout.i!;
+        }
+    }
+    return matrix;
+}
+
+export function isFocusedChartShrunk(oldDimension: ChartDimension, newDimension: ChartDimension): boolean {
+    return (oldDimension.w + oldDimension.h) > (newDimension.w + newDimension.h);
+}
+
+export function getPositionXByUniqueKey(layouts: Layout[], uniqueKey: string): number | undefined {
+    const findLayoutResult = _.find(layouts, (layout) => {
+        if (layout.i === uniqueKey) {
+            return layout;
+        }
+    });
+    return findLayoutResult ? findLayoutResult.x : undefined;
+}
+
+export function getPositionYByUniqueKey(layouts: Layout[], uniqueKey: string): number | undefined {
+    const findLayoutResult = _.find(layouts, (layout) => {
+        if (layout.i === uniqueKey) {
+            return layout;
+        }
+    });
+    return findLayoutResult ? findLayoutResult.y : undefined;
 }
 
 export function getDefaultPriorityByUniqueKey(uniqueKey: string): number {
@@ -1244,6 +1328,37 @@ export function clinicalDataCountComparator(a: ClinicalDataCount, b: ClinicalDat
         return b.count - a.count;
     }
 }
+
+type ClinicalAttributeSorting = {
+    priority: number,
+    displayName: string
+}
+
+export function clinicalAttributeSortingComparator(a: ClinicalAttributeSorting, b: ClinicalAttributeSorting): number {
+    return b.priority - a.priority || a.displayName.localeCompare(b.displayName);
+}
+
+export function clinicalAttributeComparator(a: ClinicalAttribute, b: ClinicalAttribute): number {
+    return clinicalAttributeSortingComparator({
+        priority: Number(a.priority),
+        displayName: a.displayName
+    }, {
+        priority: Number(b.priority),
+        displayName: b.displayName
+    });
+}
+
+// Descent sort priority then ascent sort by display name
+export function chartMetaComparator(a: ChartMeta, b: ChartMeta): number {
+    return clinicalAttributeSortingComparator({
+        priority: a.priority,
+        displayName: a.displayName
+    }, {
+        priority: b.priority,
+        displayName: b.displayName
+    });
+}
+
 
 export function submitToPage(url:string, params: { [id: string]: string }, target?: string) {
     try {

@@ -17,7 +17,7 @@ const SELECTED_PATIENTS = "strong[data-test='selected-patients']";
 const ADD_CHART_BUTTON = "[data-test='add-charts-button']";
 const ADD_CHART_CLINICAL_TAB = ".addChartTabs a.tabAnchor_Clinical";
 const ADD_CHART_GENOMIC_TAB = ".addChartTabs a.tabAnchor_Genomic";
-const ADD_CHART_CUSTOM_GROUPS_TAB = ".addChartTabs a[class='tabAnchor_Custom Groups']";
+const ADD_CHART_CUSTOM_DATA_TAB = ".addChartTabs a[class='tabAnchor_Custom Data']";
 const ADD_CHART_CUSTOM_GROUPS_ADD_CHART_BUTTON = "[data-test='CustomCaseSetSubmitButton']";
 const ADD_CHART_CUSTOM_GROUPS_TEXTAREA = "[data-test='CustomCaseSetInput']";
 const STUDY_SUMMARY_RAW_DATA_DOWNLOAD="[data-test='studySummaryRawDataDownloadIcon']";
@@ -67,7 +67,7 @@ describe('study laml_tcga tests', () => {
     });
 
     it('when quickly adding charts, each chart should get proper data.', () => {
-        browser.click(ADD_CHART_BUTTON)
+        browser.click(ADD_CHART_BUTTON);
         // Wait for the data frequency is calculated
         waitForNetworkQuiet();
         // Click on three options
@@ -82,11 +82,15 @@ describe('study laml_tcga tests', () => {
     });
 
     it('when adding chart with categories more than the pie2Table threshold, the pie chart should be converted to table', () => {
-        browser.setValue("[data-test='fixed-header-table-search-input']", 'Cytogenetic');
-        browser.waitForVisible("[data-test='add-chart-option-cytogenetic-abnormality-type']", 10000);
-        browser.click("[data-test='add-chart-option-cytogenetic-abnormality-type']");
-        browser.waitForVisible("[data-test='chart-container-PATIENT_CYTOGENETIC_ABNORMALITY_TYPE']", 10000);
-        const res = browser.checkElement("[data-test='chart-container-PATIENT_CYTOGENETIC_ABNORMALITY_TYPE']");
+        browser.setValue("[data-test='fixed-header-table-search-input']", 'Other Sample ID');
+        browser.waitForVisible("[data-test='add-chart-option-other-sample-id'] input", 10000);
+
+        // Pause a bit time to let the table render
+        browser.pause();
+
+        browser.click("[data-test='add-chart-option-other-sample-id'] input");
+        browser.waitForVisible("[data-test='chart-container-SAMPLE_OTHER_SAMPLE_ID']", 10000);
+        const res = browser.checkElement("[data-test='chart-container-SAMPLE_OTHER_SAMPLE_ID']");
         assertScreenShotMatch(res);
     });
 
@@ -147,10 +151,10 @@ describe('study laml_tcga tests', () => {
         });
         describe('add custom chart', () => {
             before(()=>{
-                if (!browser.isVisible(ADD_CHART_CUSTOM_GROUPS_TAB)) {
+                if (!browser.isVisible(ADD_CHART_CUSTOM_DATA_TAB)) {
                     browser.click(ADD_CHART_BUTTON);
                 }
-                browser.click(ADD_CHART_CUSTOM_GROUPS_TAB);
+                browser.click(ADD_CHART_CUSTOM_DATA_TAB);
             });
             it('add chart button should be disabled when no content in the textarea', () => {
                 assert(!browser.isEnabled(ADD_CHART_CUSTOM_GROUPS_ADD_CHART_BUTTON));
@@ -186,7 +190,7 @@ describe('study laml_tcga tests', () => {
             });
             after(()=>{
                 // Close the tooltip
-                if (browser.isVisible(ADD_CHART_CUSTOM_GROUPS_TAB)) {
+                if (browser.isVisible(ADD_CHART_CUSTOM_DATA_TAB)) {
                     browser.click(ADD_CHART_BUTTON);
                 }
             })
@@ -447,6 +451,7 @@ describe('check the simple filter(filterAttributeId, filterValues) is working pr
         const url = `${CBIOPORTAL_URL}/study?id=lgg_tcga&filterAttributeId=ONCOTREE_CODE&filterValues=OAST`;
         goToUrlAndSetLocalStorage(url);
         waitForNetworkQuiet();
+        browser.moveToObject("body", 0, 0);
         const res = browser.checkElement('#mainColumn');
         assertScreenShotMatch(res);
     });
@@ -455,6 +460,7 @@ describe('check the simple filter(filterAttributeId, filterValues) is working pr
         const url = `${CBIOPORTAL_URL}/study?id=lgg_tcga&filterAttributeId=ONCOTREE_CODE_TEST&filterValues=OAST`;
         goToUrlAndSetLocalStorage(url);
         waitForNetworkQuiet();
+        browser.moveToObject("body", 0, 0);
         const res = browser.checkElement("[data-test='study-view-header']");
         assertScreenShotMatch(res);
     });

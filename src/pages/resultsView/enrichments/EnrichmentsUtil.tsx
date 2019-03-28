@@ -7,6 +7,7 @@ import { BoxPlotModel, calculateBoxPlotModel } from 'shared/lib/boxPlotUtils';
 import { NumericGeneMolecularData } from 'shared/api/generated/CBioPortalAPI';
 import seedrandom from 'seedrandom';
 import { roundLogRatio } from 'shared/lib/FormatUtils';
+import {IMiniFrequencyScatterChartData} from "./MiniFrequencyScatterChart";
 
 const LOG_VALUE = "LOG-VALUE";
 const LOG2_VALUE = "LOG2-VALUE";
@@ -37,6 +38,19 @@ export function getAlterationScatterData(alterationEnrichments: AlterationEnrich
             qValue: alterationEnrichment.qValue,
             logRatio: alterationEnrichment.logRatio,
             hovered: false
+        };
+    });
+}
+
+export function getAlterationFrequencyScatterData(alterationEnrichments: AlterationEnrichmentRow[], queryGenes: string[]): IMiniFrequencyScatterChartData[] {
+    return alterationEnrichments.filter(a => !queryGenes.includes(a.hugoGeneSymbol)).map((alterationEnrichment) => {
+        return {
+            x: alterationEnrichment.alteredPercentage,
+            y: alterationEnrichment.unalteredPercentage,
+            hugoGeneSymbol: alterationEnrichment.hugoGeneSymbol,
+            pValue: alterationEnrichment.pValue,
+            qValue: alterationEnrichment.qValue,
+            logRatio: alterationEnrichment.logRatio
         };
     });
 }
@@ -100,7 +114,7 @@ export function getExpressionRowData(expressionEnrichments: ExpressionEnrichment
 }
 
 export function getFilteredData(data: Pick<ExpressionEnrichmentRow, "logRatio" | "qValue" | "hugoGeneSymbol">[], negativeLogFilter: boolean, positiveLogFilter: boolean, qValueFilter: boolean,
-    selectedGenes: string[]|null, excludeGenes:string[]|null): any[] {
+    selectedGenes: string[]|null): any[] {
 
     return data.filter(alterationEnrichment => {
         let result = false;
@@ -115,9 +129,6 @@ export function getFilteredData(data: Pick<ExpressionEnrichmentRow, "logRatio" |
         }
         if (selectedGenes) {
             result = result && selectedGenes.includes(alterationEnrichment.hugoGeneSymbol);
-        }
-        if (excludeGenes) {
-            result = result && !excludeGenes.includes(alterationEnrichment.hugoGeneSymbol);
         }
         return result;
     });

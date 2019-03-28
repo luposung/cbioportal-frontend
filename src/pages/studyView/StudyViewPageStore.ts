@@ -65,13 +65,13 @@ import {
     getSamplesByExcludingFiltersOnChart,
     isFiltered,
     isLogScaleByDataBins,
-    isPreSelectedClinicalAttr,
     makePatientToClinicalAnalysisGroup,
     MutationCountVsCnaYBinsMin,
     NA_DATA,
     showOriginStudiesInSummaryDescription,
     submitToPage,
-    getClinicalDataCountWithColorByCategoryCounts
+    getClinicalDataCountWithColorByCategoryCounts, shouldShowChart,
+    clinicalAttributeComparator
 } from './StudyViewUtils';
 import MobxPromise from 'mobxpromise';
 import {SingleGeneQuery} from 'shared/lib/oql/oql-parser';
@@ -536,10 +536,18 @@ export class StudyViewPageStore {
             cols: cols,
             grid: STUDY_VIEW_CONFIG.layout.grid,
             gridMargin: STUDY_VIEW_CONFIG.layout.gridMargin,
-            layout: calculateLayout(this.visibleAttributes, cols),
+            layout: calculateLayout(this.visibleAttributes, cols, this.currentGridLayout, this.currentFocusedChartByUser),
             dimensions: STUDY_VIEW_CONFIG.layout.dimensions
         };
     }
+
+    @autobind
+    updateCurrentGridLayout(newGridLayout: ReactGridLayout.Layout[]) {
+        this.currentGridLayout = newGridLayout;
+    }
+
+    private currentGridLayout: ReactGridLayout.Layout[] | undefined = undefined;
+    private currentFocusedChartByUser: ChartMeta | undefined = undefined;
 
     public clinicalDataBinPromises: { [id: string]: MobxPromise<DataBin[]> } = {};
     public clinicalDataCountPromises: { [id: string]: MobxPromise<ClinicalDataCountWithColor[]> } = {};
@@ -1848,6 +1856,10 @@ export class StudyViewPageStore {
         }
     }, []);
 
+    @computed get isSingleVirtualStudyPageWithoutFilter() {
+        return (this.filteredPhysicalStudies.result.length + this.filteredVirtualStudies.result.length) === 1 && this.filteredVirtualStudies.result.length > 0 && !this.chartsAreFiltered;
+    }
+
     @computed get analysisGroupsPossible() {
         // analysis groups possible iff there are visible analysis groups-capable charts
         const analysisGroupsCharts =
@@ -2192,6 +2204,8 @@ export class StudyViewPageStore {
             this.chartsDimension[attr.uniqueKey] = STUDY_VIEW_CONFIG.layout.dimensions[newChartType];
             this.chartsType.set(attr.uniqueKey, newChartType);
         }
+        this.currentFocusedChartByUser = _.clone(attr);
+        this.currentFocusedChartByUser.dimension = this.chartsDimension[attr.uniqueKey];
     }
 
     readonly defaultVisibleAttributes = remoteData({
@@ -2202,46 +2216,8 @@ export class StudyViewPageStore {
                 return attr;
             });
 
-            let sampleAttributeCount = 0;
-            let patientAttributeCount = 0;
-            let filterAttributes: ClinicalAttribute[] = []
-            // Todo: its a temporary logic to show NUMBER_OF_CHARTS_SHOWING charts initially
-            // this logic will be updated later
-            queriedAttributes.sort((a, b) => {
-                // Sort by priority first
-                let priorityDiff = Number(a.priority) - Number(b.priority);
+            let filterAttributes: ClinicalAttribute[] = queriedAttributes.sort(clinicalAttributeComparator).slice(0, 20);
 
-                if(priorityDiff != 0) {
-                    return -priorityDiff;
-                }
-
-                if (isPreSelectedClinicalAttr(a.clinicalAttributeId)) {
-                    if (isPreSelectedClinicalAttr(b.clinicalAttributeId)) {
-                        return 0;
-                    }
-                    return -1;
-                }
-                if (isPreSelectedClinicalAttr(b.clinicalAttributeId)) {
-                    return -1;
-                }
-                return 0;
-            }).forEach(attribute => {
-                const priority = Number(attribute.priority);
-                if(priority === 0) {
-                    return;
-                }
-                if (attribute.patientAttribute) {
-                    if (patientAttributeCount < STUDY_VIEW_CONFIG.thresholds.clinicalChartsPerGroup || priority > STUDY_VIEW_CONFIG.defaultPriority) {
-                        filterAttributes.push(attribute)
-                        patientAttributeCount++;
-                    }
-                } else {
-                    if (sampleAttributeCount < STUDY_VIEW_CONFIG.thresholds.clinicalChartsPerGroup || priority > STUDY_VIEW_CONFIG.defaultPriority) {
-                        filterAttributes.push(attribute)
-                        sampleAttributeCount++;
-                    }
-                }
-            });
             // Also check the initial filters, make sure all clinical attributes in initial filters will be added in default visible attributes
             let initialFilteredAttributeIds:string[] = [];
             if(this.initialFilters.clinicalDataEqualityFilters !== undefined){
@@ -2321,7 +2297,7 @@ export class StudyViewPageStore {
     initializeClinicalDataBinCountCharts() {
         _.each(_.groupBy(this.initialVisibleAttributesClinicalDataBinCountData.result, 'attributeId'), (item:DataBin[], attributeId:string) => {
             const uniqueKey = getClinicalAttributeUniqueKeyByDataTypeAttrId(item[0].clinicalDataType, attributeId);
-            if (isFiltered(this.initialFilters) || item.length >= 2) {
+            if (shouldShowChart(this.initialFilters, item.length, this.samples.result.length)) {
                 this._chartVisibility.set(uniqueKey, true);
             }
             this.chartsType.set(uniqueKey, ChartTypeEnum.BAR_CHART);
@@ -3251,7 +3227,7 @@ export class StudyViewPageStore {
 
     @action
     showAsPieChart(uniqueKey: string, dataSize: number) {
-        if (isFiltered(this.initialFilters) || dataSize >= 2) {
+        if (shouldShowChart(this.initialFilters, dataSize, this.samples.result.length)) {
             this.changeChartVisibility(uniqueKey, true);
 
             if (dataSize > STUDY_VIEW_CONFIG.thresholds.pieToTable || _.includes(STUDY_VIEW_CONFIG.tableAttrs, uniqueKey)) {

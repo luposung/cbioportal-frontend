@@ -2,6 +2,8 @@ import {assert} from 'chai';
 import {
     calcIntervalBinValues,
     calculateLayout,
+    calculateNewLayoutForFocusedChart,
+    chartMetaComparator,
     clinicalDataCountComparator,
     filterCategoryBins,
     filterIntervalBins,
@@ -10,15 +12,20 @@ import {
     formatFrequency,
     formatNumericalTickValues,
     generateCategoricalData,
+    generateMatrixByLayout,
     generateNumericalData,
+    getClinicalDataCountWithColorByCategoryCounts,
     getClinicalDataCountWithColorByClinicalDataCount,
-    getClinicalDataIntervalFilterValues, getClinicalEqualityFilterValuesByString,
+    getClinicalDataIntervalFilterValues,
+    getClinicalEqualityFilterValuesByString,
     getCNAByAlteration,
     getDefaultChartTypeByClinicalAttribute,
     getExponent,
     getFilteredSampleIdentifiers,
     getFilteredStudiesWithSamples,
     getFrequencyStr,
+    getPositionXByUniqueKey,
+    getPositionYByUniqueKey,
     getPriorityByClinicalAttribute,
     getQValue,
     getRequestedAwaitPromisesForClinicalData,
@@ -26,6 +33,7 @@ import {
     getVirtualStudyDescription,
     intervalFiltersDisplayValue,
     isEveryBinDistinct,
+    isFocusedChartShrunk,
     isLogScaleByDataBins,
     isLogScaleByValues,
     isOccupied,
@@ -33,9 +41,9 @@ import {
     needAdditionShiftForLogScaleBarChart,
     pickClinicalDataColors,
     showOriginStudiesInSummaryDescription,
+    shouldShowChart,
     toFixedDigit,
-    updateGeneQuery,
-    getClinicalDataCountWithColorByCategoryCounts
+    updateGeneQuery
 } from 'pages/studyView/StudyViewUtils';
 import {
     ClinicalDataIntervalFilterValue,
@@ -58,6 +66,12 @@ import {ChartTypeEnum, STUDY_VIEW_CONFIG} from "./StudyViewConfig";
 import {MobxPromise} from "mobxpromise";
 
 describe('StudyViewUtils', () => {
+    const emptyStudyViewFilter: StudyViewFilter = {
+        clinicalDataEqualityFilters: [],
+        clinicalDataIntervalFilters: [],
+        cnaGenes: [],
+        mutatedGenes: []
+    } as any;
 
     describe('updateGeneQuery', () => {
         it('when gene selected in table', () => {
@@ -86,6 +100,7 @@ describe('StudyViewUtils', () => {
         it('when all samples are selected', () => {
             assert.isTrue(
                 getVirtualStudyDescription(
+                    '',
                     studies as any,
                     {} as any,
                     {} as any,
@@ -133,6 +148,7 @@ describe('StudyViewUtils', () => {
 
             assert.isTrue(
                 getVirtualStudyDescription(
+                    '',
                     studies as any,
                     filter,
                     {
@@ -148,6 +164,7 @@ describe('StudyViewUtils', () => {
         it('when username is not null', () => {
             assert.isTrue(
                 getVirtualStudyDescription(
+                    '',
                     studies as any,
                     {} as any,
                     {} as any,
@@ -156,12 +173,65 @@ describe('StudyViewUtils', () => {
                 ).startsWith('4 samples from 2 studies:\n- Study 1 (2 samples)\n- Study 2 (2 samples)'));
             assert.isTrue(
                 getVirtualStudyDescription(
+                    '',
                     studies as any,
                     {} as any,
                     {} as any,
                     [],
                     'user1'
                 ).endsWith('by user1'));
+        });
+        it('when previousDescription is defined', () => {
+            let filter = {
+                clinicalDataEqualityFilters: [{
+                    'attributeId': 'attribute1',
+                    'clinicalDataType': "SAMPLE",
+                    'values': ['value1']
+                }]
+            } as StudyViewFilterWithSampleIdentifierFilters;
+
+            let genes = [{entrezGeneId: 1, hugoGeneSymbol: "GENE1"}, {
+                entrezGeneId: 2,
+                hugoGeneSymbol: "GENE2"
+            }] as Gene[];
+
+            assert.isTrue(
+                getVirtualStudyDescription(
+                    'test\nCreated on ...',
+                    studies as any,
+                    filter,
+                    {
+                        'SAMPLE_attribute1': 'attribute1 name',
+                        'PATIENT_attribute2': 'attribute2 name',
+                        'SAMPLE_attribute3': 'attribute3 name'
+                    },
+                    genes
+                ).startsWith('test\n\nCreated on'));
+        });
+    });
+
+    describe('shouldShowChart', () => {
+        const hasInfoFilter = {
+            clinicalDataEqualityFilters: [{
+                'attributeId': 'attribute1',
+                'clinicalDataType': "SAMPLE" as 'SAMPLE',
+                'values': ['value1']
+            }],
+            clinicalDataIntervalFilters: [],
+            mutatedGenes: [],
+            cnaGenes: []
+        };
+        it("return true when there is only one sample in the study", () => {
+            assert.isTrue(shouldShowChart(emptyStudyViewFilter, 1, 1));
+        });
+        it("return true when unique number of data bigger than one", () => {
+            assert.isTrue(shouldShowChart(emptyStudyViewFilter, 2, 2));
+        });
+        it("return true when study view is filtered", () => {
+            assert.isTrue(shouldShowChart(hasInfoFilter, 1, 2));
+        });
+        it("return false when study view is not filtered, unique number of data less than 2, and there are more than one sample in the study", () => {
+            assert.isFalse(shouldShowChart(emptyStudyViewFilter, 1, 2));
         });
     });
 
@@ -1472,12 +1542,6 @@ describe('StudyViewUtils', () => {
 
     describe('getSamplesByExcludingFiltersOnChart', () => {
         let fetchStub: sinon.SinonStub;
-        const emptyStudyViewFilter: StudyViewFilter = {
-            clinicalDataEqualityFilters: [],
-            clinicalDataIntervalFilters: [],
-            cnaGenes: [],
-            mutatedGenes: []
-        } as any
         beforeEach(() => {
             fetchStub = sinon.stub(internalClient, 'fetchFilteredSamplesUsingPOST');
             fetchStub
@@ -1741,6 +1805,28 @@ describe('StudyViewUtils', () => {
         });
     });
 
+    describe('chartMetaComparator', () => {
+        it('returns 0 if priority and display name are exactly same', () => {
+            assert.equal(chartMetaComparator({priority: 100, displayName: "test chart"} as ChartMeta, {priority: 100, displayName: "test chart"} as ChartMeta), 0);
+        });
+
+        it('returns difference if priority is higher', () => {
+            assert.equal(chartMetaComparator({priority: 100, displayName: "name b"} as ChartMeta, {priority: 50, displayName: "name a"} as ChartMeta), -50);
+        });
+
+        it('returns difference if priority is lower', () => {
+            assert.equal(chartMetaComparator({priority: 50, displayName: "name a"} as ChartMeta, {priority: 100, displayName: "name b"} as ChartMeta), 50);
+        });
+
+        it('when priority is same, returns 1 if displayName is alphabet higher', () => {
+            assert.equal(chartMetaComparator({priority: 100, displayName: "name z"} as ChartMeta, {priority: 100, displayName: "name a"} as ChartMeta), 1);
+        });
+
+        it('when priority is same, returns -1 if displayName is alphabet lower', () => {
+            assert.equal(chartMetaComparator({priority: 100, displayName: "name a"} as ChartMeta, {priority: 100, displayName: "name z"} as ChartMeta), -1);
+        });
+    });
+
     describe('getRequestedAwaitPromisesForClinicalData', () => {
         // Create some references
         const unfilteredPromise: MobxPromise<any> = {
@@ -1875,4 +1961,191 @@ describe('StudyViewUtils', () => {
                 ], getClinicalDataCountWithColorByCategoryCounts(10, 10))
         });
     });
+
+    describe ('calculateNewLayoutForFocusedChart', () => {
+        it('should return the previous x, y, and new chartMeta dimension for not overflow position', () => {
+            const clinicalAttr: ClinicalAttribute = {
+                'clinicalAttributeId': 'test',
+                'datatype': 'STRING',
+                'description': '',
+                'displayName': '',
+                'patientAttribute': true,
+                'priority': '1',
+                'studyId': ''
+            };
+            const layout = {
+                x: 1,
+                y: 1,
+                w: 1,
+                h: 1
+            };
+            const focusedChartMeta = {
+                clinicalAttribute: clinicalAttr,
+                displayName: clinicalAttr.displayName,
+                description: clinicalAttr.description,
+                uniqueKey: 'test',
+                chartType: ChartTypeEnum.PIE_CHART,
+                dataType: ChartMetaDataTypeEnum.CLINICAL,
+                patientAttribute: clinicalAttr.patientAttribute,
+                dimension: {w: 2, h: 2},
+                renderWhenDataChange: false,
+                priority: 1,
+            };
+            const cols = 5;
+            const newLayout = calculateNewLayoutForFocusedChart(layout, focusedChartMeta, cols);
+            assert.equal(newLayout.i, 'test');
+            assert.equal(newLayout.x, 1);
+            assert.equal(newLayout.y, 1);
+            assert.equal(newLayout.w, 2);
+            assert.equal(newLayout.h, 2);
+            assert.equal(newLayout.isResizable, false);
+        });
+
+        it('should return the fixed x, previous y, and new chartMeta dimension for the overflow positions', () => {
+            const clinicalAttr: ClinicalAttribute = {
+                'clinicalAttributeId': 'test',
+                'datatype': 'STRING',
+                'description': '',
+                'displayName': '',
+                'patientAttribute': true,
+                'priority': '1',
+                'studyId': ''
+            };
+            const layout = {
+                x: 4,
+                y: 1,
+                w: 1,
+                h: 1
+            };
+            const focusedChartMeta = {
+                clinicalAttribute: clinicalAttr,
+                displayName: clinicalAttr.displayName,
+                description: clinicalAttr.description,
+                uniqueKey: 'test',
+                chartType: ChartTypeEnum.PIE_CHART,
+                dataType: ChartMetaDataTypeEnum.CLINICAL,
+                patientAttribute: clinicalAttr.patientAttribute,
+                dimension: {w: 2, h: 2},
+                renderWhenDataChange: false,
+                priority: 1,
+            };
+            const cols = 5;
+            const newLayout = calculateNewLayoutForFocusedChart(layout, focusedChartMeta, cols);
+            assert.equal(newLayout.i, 'test');
+            assert.equal(newLayout.x, 3);
+            assert.equal(newLayout.y, 1);
+            assert.equal(newLayout.w, 2);
+            assert.equal(newLayout.h, 2);
+            assert.equal(newLayout.isResizable, false);
+        });
+
+        it('should return the fixed x, previous y, and new chartMeta dimension for the shrunk chart', () => {
+            const clinicalAttr: ClinicalAttribute = {
+                'clinicalAttributeId': 'test',
+                'datatype': 'STRING',
+                'description': '',
+                'displayName': '',
+                'patientAttribute': true,
+                'priority': '1',
+                'studyId': ''
+            };
+            const layout = {
+                x: 1,
+                y: 1,
+                w: 2,
+                h: 2
+            };
+            const focusedChartMeta = {
+                clinicalAttribute: clinicalAttr,
+                displayName: clinicalAttr.displayName,
+                description: clinicalAttr.description,
+                uniqueKey: 'test',
+                chartType: ChartTypeEnum.PIE_CHART,
+                dataType: ChartMetaDataTypeEnum.CLINICAL,
+                patientAttribute: clinicalAttr.patientAttribute,
+                dimension: {w: 1, h: 1},
+                renderWhenDataChange: false,
+                priority: 1,
+            }
+            const cols = 5;
+            const newLayout = calculateNewLayoutForFocusedChart(layout, focusedChartMeta, cols);
+            assert.equal(newLayout.i, 'test');
+            assert.equal(newLayout.x, 2);
+            assert.equal(newLayout.y, 1);
+            assert.equal(newLayout.w, 1);
+            assert.equal(newLayout.h, 1);
+            assert.equal(newLayout.isResizable, false);
+        });
+    })
+    
+    describe ('generateMatrixByLayout', () => {
+        it('should return the generated matrix', () => {
+            const layout = {
+                i: 'test',
+                x: 1,
+                y: 1,
+                w: 1,
+                h: 1,
+                isResizable: false
+            };
+            const cols = 5;
+            const matrix = generateMatrixByLayout(layout, cols);
+            for (let i = 0; i < matrix.length; i++) {
+                for (let j = 0; j < cols; j++) {
+                    if (i === 1 && j === 1) {
+                        assert.equal(matrix[i][j], 'test');
+                        break;
+                    }
+                    assert.equal(matrix[i][j], '');
+                }
+            }
+        });
+    })
+
+    describe ('isFocusedChartShrunk', () => {
+        const largeDimension = {w: 2, h: 2};
+        const smallDimension = {w: 1, h: 1};
+        it('should return true if the chart shrunk', () => {
+            assert.equal(isFocusedChartShrunk(largeDimension, smallDimension), true);
+        });
+        it('should return false if the chart not shrunk', () => {
+            assert.equal(isFocusedChartShrunk(smallDimension, largeDimension), false);
+        });
+        it('should return false if the dimension is not changed', () => {
+            assert.equal(isFocusedChartShrunk(smallDimension, smallDimension), false);
+            assert.equal(isFocusedChartShrunk(largeDimension, largeDimension), false);
+        });
+    })
+
+    const layoutForPositionTest = [
+        {
+            i: 'test',
+            x: 1,
+            y: 1,
+            w: 1,
+            h: 1
+        } as Layout
+    ];    
+
+    describe ('getPositionXByUniqueKey', () => {
+        it('should return undefined for the not exist uniqueKey', () => {
+            assert.equal(getPositionXByUniqueKey(layoutForPositionTest, 'test1'), undefined);
+            assert.equal(getPositionXByUniqueKey([], 'test'), undefined);
+            assert.equal(getPositionXByUniqueKey([], ''), undefined);
+        });
+        it('should return the X value of the layout which matches the uniqueKey', () => {
+            assert.equal(getPositionXByUniqueKey(layoutForPositionTest, 'test'), 1);
+        });
+    })
+
+    describe ('getPositionYByUniqueKey', () => {
+        it('should return undefined for the not exist uniqueKey', () => {
+            assert.equal(getPositionYByUniqueKey(layoutForPositionTest, 'test1'), undefined);
+            assert.equal(getPositionYByUniqueKey([], 'test'), undefined);
+            assert.equal(getPositionYByUniqueKey([], ''), undefined);
+        });
+        it('should return the Y value of the layout which matches the uniqueKey', () => {
+            assert.equal(getPositionYByUniqueKey(layoutForPositionTest, 'test'), 1);
+        });
+    })
 });

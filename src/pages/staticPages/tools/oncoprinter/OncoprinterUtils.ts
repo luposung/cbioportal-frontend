@@ -21,7 +21,7 @@ import {getAlterationString} from "../../../../shared/lib/CopyNumberUtils";
 
 export type OncoprinterGeneticTrackDatum =
     Pick<GeneticTrackDatum, "trackLabel" | "study_id" | "uid" |
-                            "disp_mut" | "disp_cna" | "disp_mrna" | "disp_prot" | "disp_fusion" | "disp_germ" | "disp_drug"> & { sample:string, data:OncoprinterGeneticTrackDatum_Data[]};
+                            "disp_mut" | "disp_cna" | "disp_mrna" | "disp_prot" | "disp_fusion" | "disp_germ" | "disp_drug"> & { sample:string, patient:string, data:OncoprinterGeneticTrackDatum_Data[]} ;
 
 export type OncoprinterGeneticTrackDatum_Data =
     GeneticTrackDatum_Data & Pick<Partial<Mutation>, "proteinPosStart" | "proteinPosEnd" | "startPosition" | "endPosition">;
@@ -434,7 +434,7 @@ export function getOncoprintData(
         geneToSampleData,
         (sampleData, gene)=>sampleData.map(o=>(
             fillGeneticTrackDatum(
-                { sample: o.sampleId, study_id: "", uid: o.sampleId },
+                { sample: o.sampleId, patient: o.sampleId, study_id: "", uid: o.sampleId },
                 gene, o.data
             ) as OncoprinterGeneticTrackDatum
         ))
@@ -556,13 +556,14 @@ export function annotateGeneticTrackData(
 }
 
 export function parseInput(input:string):{status:"complete", result:OncoprinterInputLine[], error:undefined}|{status:"error", result:undefined, error:string} {
-    const lines = input.trim().split("\n").map(line=>line.split(/\s+/));
-    if (_.isEqual(lines[0], ["Sample", "Gene", "Alteration", "Type"])) {
-        lines.shift(); // skip header line
-    }
+    const lines = input.trim().split("\n").map(line=>line.trim().split(/\s+/));
     try {
         const result = lines.map((line, lineIndex)=>{
-            const errorPrefix = `Data input error on line ${lineIndex}: `;
+            if (lineIndex === 0 &&
+                _.isEqual(lines[0].map(s=>s.toLowerCase()), ["sample", "gene", "alteration", "type"])) {
+                return null; // skip header line
+            }
+            const errorPrefix = `Data input error on line ${lineIndex+1}: \n${line.join("\t")}\n\n`;
             if (line.length === 1) {
                 // Type 1 line
                 return { sampleId: line[0] };
@@ -628,7 +629,7 @@ export function parseInput(input:string):{status:"complete", result:OncoprinterI
         });
         return {
             status: "complete",
-            result,
+            result: result.filter(x=>!!x) as OncoprinterInputLine[],
             error:undefined
         };
     } catch (e) {
