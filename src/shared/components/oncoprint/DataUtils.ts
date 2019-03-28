@@ -58,6 +58,9 @@ const protRenderPriority = {
     'up': 0,
     'down': 0
 };
+const drugRenderPriority = stringListToIndexSet([
+    'drugone',
+]);
 
 export type OncoprintMutationType = "missense" | "inframe" | "fusion" | "promoter" | "trunc" | "other";
 
@@ -119,6 +122,7 @@ export function fillGeneticTrackDatum(
     const dispProtCounts:{[protEvent:string]:number} = {};
     const dispMutCounts:{[mutType:string]:number} = {};
     const dispGermline:{[mutType:string]:boolean} = {};
+    const dispDrugCounts:{[drugLabel:string]:number} = {};
     const caseInsensitiveGermlineMatch = new RegExp(MUTATION_STATUS_GERMLINE, "i");
 
     for (const event of data) {
@@ -159,6 +163,13 @@ export function fillGeneticTrackDatum(
                     dispMutCounts[oncoprintMutationType] += 1;
                 }
                 break;
+            case "DRUG_USED":
+                if (event.alterationSubType) {
+                    const drugLabel = event.alterationSubType;
+                    dispDrugCounts[drugLabel] = dispDrugCounts[drugLabel] || 0;
+                    dispDrugCounts[drugLabel] += 1;
+                }
+                break;
         }
     }
     if (dispFusion) {
@@ -168,6 +179,7 @@ export function fillGeneticTrackDatum(
     newDatum.disp_mrna = selectDisplayValue(dispMrnaCounts, mrnaRenderPriority);
     newDatum.disp_prot = selectDisplayValue(dispProtCounts, protRenderPriority);
     newDatum.disp_mut = selectDisplayValue(dispMutCounts, mutRenderPriority);
+    newDatum.disp_drug = selectDisplayValue(dispDrugCounts, drugRenderPriority);
     newDatum.disp_germ = newDatum.disp_mut ? dispGermline[newDatum.disp_mut] : undefined;
 
     return newDatum as GeneticTrackDatum; // return for convenience, even though changes made in place

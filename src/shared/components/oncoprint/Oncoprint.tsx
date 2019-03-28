@@ -83,6 +83,7 @@ export type GeneticTrackDatum = {
     disp_prot?:string;
     disp_fusion?:boolean;
     disp_germ?:boolean;
+    disp_drug?:string;
 };
 
 export type GeneticTrackSpec = {

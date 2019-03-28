@@ -21,7 +21,7 @@ import {getAlterationString} from "../../../../shared/lib/CopyNumberUtils";
 
 export type OncoprinterGeneticTrackDatum =
     Pick<GeneticTrackDatum, "trackLabel" | "study_id" | "uid" |
-                            "disp_mut" | "disp_cna" | "disp_mrna" | "disp_prot" | "disp_fusion" | "disp_germ"> & { sample:string, data:OncoprinterGeneticTrackDatum_Data[]} ;
+                            "disp_mut" | "disp_cna" | "disp_mrna" | "disp_prot" | "disp_fusion" | "disp_germ" | "disp_drug"> & { sample:string, data:OncoprinterGeneticTrackDatum_Data[]};
 
 export type OncoprinterGeneticTrackDatum_Data =
     GeneticTrackDatum_Data & Pick<Partial<Mutation>, "proteinPosStart" | "proteinPosEnd" | "startPosition" | "endPosition">;
@@ -40,6 +40,10 @@ export type OncoprinterInputLineType2 = OncoprinterInputLineType1 & {
     hugoGeneSymbol:string;
     alteration:OncoprintMutationType | "amp" | "homdel" | "gain" | "hetloss" | "mrnaUp" | "mrnaDown" | "protUp" | "protDown";
     proteinChange?:string; // optional parameter: protein change
+};
+export type OncoprinterInputLineTypeDrug = OncoprinterInputLineType1 & {
+    hugoGeneSymbol:string;
+    labelName:string;
 };
 /* Leaving commented only for reference, this will be replaced by unified input strategy
 export type OncoprinterInputLineType3_Incomplete = OncoprinterInputLineType1 & {
@@ -65,6 +69,10 @@ export type OncoprinterInputLine = OncoprinterInputLineType1 | OncoprinterInputL
 
 export function isType2(inputLine:OncoprinterInputLine):inputLine is OncoprinterInputLineType2 {
     return inputLine.hasOwnProperty("alteration");
+}
+
+export function isTypeDrug(inputLine:OncoprinterInputLine):inputLine is OncoprinterInputLineTypeDrug {
+    return inputLine.hasOwnProperty("labelName");
 }
 /* Leaving commented only for reference, this will be replaced by unified input strategy
 export function isType3NoGene(inputLine:OncoprinterInputLine):inputLine is OncoprinterInputLineType3_Incomplete {
@@ -344,6 +352,27 @@ export function makeGeneticTrackDatum_Data_Type2(oncoprinterInputLine:Oncoprinte
     return ret as OncoprinterGeneticTrackDatum_Data;
 }
 
+export function makeGeneticTrackDatum_Data_TypeDrug(oncoprinterInputLine:OncoprinterInputLineTypeDrug, hugoGeneSymbolToGene:{[hugoGeneSymbol:string]:Gene}) {
+    let ret:Partial<OncoprinterGeneticTrackDatum_Data> = {
+        // these are the same always or almost always
+        hugoGeneSymbol:oncoprinterInputLine.hugoGeneSymbol,
+
+        // we'll update these later in this function
+        entrezGeneId:0,
+    };
+
+    const gene = hugoGeneSymbolToGene[oncoprinterInputLine.hugoGeneSymbol];
+    if (gene) {
+        // add gene information if it exists
+        ret.entrezGeneId = gene.entrezGeneId;
+    }
+    ret = Object.assign(ret, {
+        molecularProfileAlterationType: "DRUG_USED",
+        alterationSubType: oncoprinterInputLine.labelName,
+    });
+    return ret as OncoprinterGeneticTrackDatum_Data;
+}
+
 export function isAltered(d:OncoprinterGeneticTrackDatum) {
     return (d.disp_mut || d.disp_cna || d.disp_mrna || d.disp_prot || d.disp_fusion);
 }
@@ -371,6 +400,20 @@ export function getSampleGeneticTrackData(
             sampleIdToData[inputLine.sampleId] = [];
         }
         sampleIdToData[inputLine.sampleId].push(makeGeneticTrackDatum_Data(inputLine, hugoGeneSymbolToGene));
+    }
+
+    const typeDrugLines = oncoprinterInput.filter(d=>(isTypeDrug(d))) as OncoprinterInputLineTypeDrug[];
+    // collect data by gene x sample
+    for (const inputLine of typeDrugLines) {
+        if (!(inputLine.hugoGeneSymbol in geneToSampleIdToData)) {
+            // add track if it doesnt yet exist
+            geneToSampleIdToData[inputLine.hugoGeneSymbol] = {};
+        }
+        const sampleIdToData = geneToSampleIdToData[inputLine.hugoGeneSymbol];
+        if (!(inputLine.sampleId in sampleIdToData)) {
+            sampleIdToData[inputLine.sampleId] = [];
+        }
+        sampleIdToData[inputLine.sampleId].push(makeGeneticTrackDatum_Data_TypeDrug(inputLine, hugoGeneSymbolToGene));
     }
     // add missing samples
     for (const inputLine of oncoprinterInput) {
@@ -524,52 +567,61 @@ export function parseInput(input:string):{status:"complete", result:OncoprinterI
                 // Type 1 line
                 return { sampleId: line[0] };
             } else if (line.length === 4) {
-                // Type 2 line
-                const sampleId = line[0];
-                const hugoGeneSymbol = line[1];
-                const alteration = line[2];
-                const lcAlteration = alteration.toLowerCase();
                 const type = line[3].toLowerCase();
-                let ret:Partial<OncoprinterInputLineType2> = { sampleId, hugoGeneSymbol };
+                if (type === "drug") {
+                    const sampleId = line[0];
+                    const hugoGeneSymbol = line[1];
+                    const labelName = line[2].toLowerCase();
+                    let ret:OncoprinterInputLineTypeDrug = { sampleId, hugoGeneSymbol, labelName };
+                    return ret;
+                } else {
+                    // Type 2 line
+                    const sampleId = line[0];
+                    const hugoGeneSymbol = line[1];
+                    const alteration = line[2];
+                    const lcAlteration = alteration.toLowerCase();
+                    const type = line[3].toLowerCase();
+                    let ret:Partial<OncoprinterInputLineType2> = { sampleId, hugoGeneSymbol };
 
-                switch (type) {
-                    case "cna":
-                        if (["amp", "gain", "hetloss", "homdel"].indexOf(lcAlteration) === -1) {
-                            throw new Error(`${errorPrefix}Alteration must be "AMP", "GAIN" ,"HETLOSS", or "HOMDEL" if Type is "CNA"`);
-                        }
-                        ret.alteration = lcAlteration as "amp"|"gain"|"hetloss"|"homdel";
-                        break;
-                    case "exp":
-                        if (lcAlteration === "up") {
-                            ret.alteration = "mrnaUp";
-                        } else if (lcAlteration === "down") {
-                            ret.alteration = "mrnaDown";
-                        } else {
-                            throw new Error(`${errorPrefix}Alteration must be "UP" or "DOWN" if Type is "EXP"`);
-                        }
-                        break;
-                    case "prot":
-                        if (lcAlteration === "up") {
-                            ret.alteration = "protUp";
-                        } else if (lcAlteration === "down") {
-                            ret.alteration = "protDown";
-                        } else {
-                            throw new Error(`${errorPrefix}Alteration must be "UP" or "DOWN" if Type is "PROT"`);
-                        }
-                        break;
-                    default:
-                        // everything else is a mutation
-                        if (["missense", "inframe", "fusion", "promoter", "trunc", "other"].indexOf(type) === -1) {
-                            if (lcAlteration === "fusion") {
-                                throw new Error(`${errorPrefix}Type must be "FUSION" if Alteration is "FUSION"`);
-                            } else {
-                                throw new Error(`${errorPrefix}Type must be "MISSENSE", "INFRAME", "TRUNC", "PROMOTER", or "OTHER" for a mutation alteration.`);
+                    switch (type) {
+                        case "cna":
+                            if (["amp", "gain", "hetloss", "homdel"].indexOf(lcAlteration) === -1) {
+                                throw new Error(`${errorPrefix}Alteration must be "AMP", "GAIN" ,"HETLOSS", or "HOMDEL" if Type is "CNA"`);
                             }
-                        }
-                        ret.alteration = type as OncoprintMutationType;
-                        ret.proteinChange = alteration;
+                            ret.alteration = lcAlteration as "amp"|"gain"|"hetloss"|"homdel";
+                            break;
+                        case "exp":
+                            if (lcAlteration === "up") {
+                                ret.alteration = "mrnaUp";
+                            } else if (lcAlteration === "down") {
+                                ret.alteration = "mrnaDown";
+                            } else {
+                                throw new Error(`${errorPrefix}Alteration must be "UP" or "DOWN" if Type is "EXP"`);
+                            }
+                            break;
+                        case "prot":
+                            if (lcAlteration === "up") {
+                                ret.alteration = "protUp";
+                            } else if (lcAlteration === "down") {
+                                ret.alteration = "protDown";
+                            } else {
+                                throw new Error(`${errorPrefix}Alteration must be "UP" or "DOWN" if Type is "PROT"`);
+                            }
+                            break;
+                        default:
+                            // everything else is a mutation
+                            if (["missense", "inframe", "fusion", "promoter", "trunc", "other"].indexOf(type) === -1) {
+                                if (lcAlteration === "fusion") {
+                                    throw new Error(`${errorPrefix}Type must be "FUSION" if Alteration is "FUSION"`);
+                                } else {
+                                    throw new Error(`${errorPrefix}Type must be "MISSENSE", "INFRAME", "TRUNC", "PROMOTER", or "OTHER" for a mutation alteration.`);
+                                }
+                            }
+                            ret.alteration = type as OncoprintMutationType;
+                            ret.proteinChange = alteration;
+                    }
+                    return ret as OncoprinterInputLineType2;
                 }
-                return ret as OncoprinterInputLineType2;
             } else {
                 throw new Error(`${errorPrefix}input lines must have either 1 or 4 columns.`);
             }
