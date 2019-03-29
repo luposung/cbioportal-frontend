@@ -620,7 +620,8 @@ function transitionGeneticTrack(
                 expansionParentKey
                 ? trackSpecKeyToTrackId[expansionParentKey]
                 : undefined
-            )
+            ), 
+            track_padding: 2
         };
         const newTrackId = oncoprint.addTracks([geneticTrackParams])[0];
         trackSpecKeyToTrackId[nextSpec.key] = newTrackId;
