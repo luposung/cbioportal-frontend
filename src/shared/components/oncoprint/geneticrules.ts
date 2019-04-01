@@ -30,9 +30,9 @@ export const CNA_COLOR_HOMDEL = "#0000ff";
 
 // drug colors
 export const DRUG_COLOR_ONE = "#00ff00";
-export const DRUG_COLOR_TWO = "#008000";
+export const DRUG_COLOR_TWO = "#00FFFF";
 export const DRUG_COLOR_THREE = "#FF00FF";
-export const DRUG_COLOR_FOUR = "#800080";
+export const DRUG_COLOR_FOUR = "#FFFF00";
 
 const MUTATION_LEGEND_ORDER = 0;
 const FUSION_LEGEND_ORDER = 1;
