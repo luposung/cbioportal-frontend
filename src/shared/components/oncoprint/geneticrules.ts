@@ -280,37 +280,37 @@ let drug_rule_params = {
       ],
       legend_label: "Drug 2",
       legend_order: DRUG_TWO_LEGEND_ORDER
+    }, 
+    drug3: {
+      shapes: [
+        {
+          type: "rectangle",
+          fill: DRUG_COLOR_THREE,
+          x: "0%",
+          y: "0%",
+          width: "100%",
+          height: "100%",
+          z: 2
+        }
+      ],
+      legend_label: "Drug 3",
+      legend_order: DRUG_THREE_LEGEND_ORDER
+    }, 
+    drug4: {
+      shapes: [
+        {
+          type: "rectangle",
+          fill: DRUG_COLOR_FOUR,
+          x: "0%",
+          y: "0%",
+          width: "100%",
+          height: "100%",
+          z: 2
+        }
+      ],
+      legend_label: "Drug 4",
+      legend_order: DRUG_FOUR_LEGEND_ORDER
     }
-  }, 
-  drug3: {
-    shapes: [
-      {
-        type: "rectangle",
-        fill: DRUG_COLOR_THREE,
-        x: "0%",
-        y: "0%",
-        width: "100%",
-        height: "100%",
-        z: 2
-      }
-    ],
-    legend_label: "Drug 3",
-    legend_order: DRUG_THREE_LEGEND_ORDER
-  }, 
-  drug4: {
-    shapes: [
-      {
-        type: "rectangle",
-        fill: DRUG_COLOR_FOUR,
-        x: "0%",
-        y: "0%",
-        width: "100%",
-        height: "100%",
-        z: 2
-      }
-    ],
-    legend_label: "Drug 4",
-    legend_order: DRUG_FOUR_LEGEND_ORDER
   }
 }
 
