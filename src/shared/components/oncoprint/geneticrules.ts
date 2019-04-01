@@ -23,13 +23,16 @@ export const MUT_COLOR_GERMLINE = "#FFFFFF";
 export const PROT_COLOR_UP = "#ff3df8";
 export const PROT_COLOR_DOWN = "#00E1FF";
 
-export const CNA_COLOR_AMP = "#00ff00";
+export const CNA_COLOR_AMP = "#ff0000";
 export const CNA_COLOR_GAIN = "#ffb6c1";
 export const CNA_COLOR_HETLOSS = "#8fd8d8";
 export const CNA_COLOR_HOMDEL = "#0000ff";
 
 // drug colors
-export const DRUG_COLOR_ONE = "#ff0000";
+export const DRUG_COLOR_ONE = "#00ff00";
+export const DRUG_COLOR_TWO = "#008000";
+export const DRUG_COLOR_THREE = "#FF00FF";
+export const DRUG_COLOR_FOUR = "#800080";
 
 const MUTATION_LEGEND_ORDER = 0;
 const FUSION_LEGEND_ORDER = 1;
@@ -45,6 +48,9 @@ const PROT_DOWN_LEGEND_ORDER = 32;
 
 // drug orders
 const DRUG_ONE_LEGEND_ORDER = 100;
+const DRUG_TWO_LEGEND_ORDER = 101;
+const DRUG_THREE_LEGEND_ORDER = 102;
+const DRUG_FOUR_LEGEND_ORDER = 103;
 
 let non_mutation_rule_params = {
   // Default: gray rectangle
@@ -245,7 +251,7 @@ export const germline_rule_params = {
 
 let drug_rule_params = {
   disp_drug: {
-    drugone: {
+    drug1: {
       shapes: [
         {
           type: "rectangle",
@@ -257,9 +263,54 @@ let drug_rule_params = {
           z: 2
         }
       ],
-      legend_label: "Drug One",
+      legend_label: "Drug 1",
       legend_order: DRUG_ONE_LEGEND_ORDER
+    }, 
+    drug2: {
+      shapes: [
+        {
+          type: "rectangle",
+          fill: DRUG_COLOR_TWO,
+          x: "0%",
+          y: "0%",
+          width: "100%",
+          height: "100%",
+          z: 2
+        }
+      ],
+      legend_label: "Drug 2",
+      legend_order: DRUG_TWO_LEGEND_ORDER
     }
+  }, 
+  drug3: {
+    shapes: [
+      {
+        type: "rectangle",
+        fill: DRUG_COLOR_THREE,
+        x: "0%",
+        y: "0%",
+        width: "100%",
+        height: "100%",
+        z: 2
+      }
+    ],
+    legend_label: "Drug 3",
+    legend_order: DRUG_THREE_LEGEND_ORDER
+  }, 
+  drug4: {
+    shapes: [
+      {
+        type: "rectangle",
+        fill: DRUG_COLOR_FOUR,
+        x: "0%",
+        y: "0%",
+        width: "100%",
+        height: "100%",
+        z: 2
+      }
+    ],
+    legend_label: "Drug 4",
+    legend_order: DRUG_FOUR_LEGEND_ORDER
   }
 }
 
